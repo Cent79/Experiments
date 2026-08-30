@@ -90,7 +90,8 @@
       function stateClass(state) { return String(state || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
       function stateBadge(state) {
         var text = String(state || 'N/A');
-        return '<span class="dsbom-state dsbom-state-' + escapeHtml(stateClass(text)) + '"><span></span>' + escapeHtml(text.replace(/_/g, ' ')) + '</span>';
+        var labels = { IN_WORK: 'In corso', FROZEN: 'Congelato', RELEASED: 'Rilasciato', OBSOLETE: 'Obsoleto', PRIVATE: 'Privato' };
+        return '<span class="dsbom-state dsbom-state-' + escapeHtml(stateClass(text)) + '">' + escapeHtml(labels[text] || text.replace(/_/g, ' ')) + '</span>';
       }
       function matchesFilters(item, filters) {
         var keys = Object.keys(filters);
