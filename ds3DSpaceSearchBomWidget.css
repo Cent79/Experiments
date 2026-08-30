@@ -166,6 +166,11 @@ body {
 
 .dsbom-empty { color: var(--ds-secondary-text); padding: 12px 8px !important; }
 .dsbom-tree-title { font-weight: 400; }
+.dsbom-item-identity { align-items: center; display: inline-flex; gap: 7px; max-width: 100%; min-width: 0; vertical-align: middle; }
+.dsbom-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsbom-type-icon { color: #4d7385; flex: 0 0 16px; height: 16px; width: 16px; }
+.dsbom-api-type-icon { object-fit: contain; }
+.dsbom-fallback-type-icon { display: inline-flex; flex: 0 0 16px; height: 16px; width: 16px; }
 
 .dsbom-toggle {
   width: 16px;

@@ -88,6 +88,36 @@
         if (field === 'state') { return valueOf(item, ['state', 'State']); }
         return '';
       }
+      function iconUrl(item) {
+        var names = ['iconUrl', 'iconURL', 'thumbnailUrl', 'thumbnailURL', 'imageUrl', 'imageURL', 'smallIcon', 'icon', 'thumbnail', 'image'];
+        var value = valueOf(item, names) || valueOf(item && item.attributes, names);
+        // Use only explicit safe image resources returned by the platform.
+        return /^(https:\/\/|data:image\/)/i.test(value) ? value : '';
+      }
+      function fallbackTypeIcon(type) {
+        var text = String(type || '').toLowerCase();
+        if (text.indexOf('drawing') >= 0 || text.indexOf('dsdrw') >= 0) {
+          return '<svg class="dsbom-type-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 1.5h8l3 3v10H2zM10 1.5v3h3M4 7h7M4 9.5h7M4 12h5" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        }
+        if (text.indexOf('document') >= 0 || text.indexOf('dscdoc') >= 0 || text.indexOf('file') >= 0) {
+          return '<svg class="dsbom-type-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5h6.5L13 5v9.5H3zM9.5 1.5V5H13M5 8h6M5 10.5h6" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        }
+        if (text.indexOf('folder') >= 0 || text.indexOf('bookmark') >= 0) {
+          return '<svg class="dsbom-type-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4h5l1.4 1.7h6.6v7.8H1.5z" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"/></svg>';
+        }
+        return '<svg class="dsbom-type-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l5 2.8v5.4L8 12.5 3 9.7V4.3zM3 4.3l5 2.8 5-2.8M8 7.1v5.4" fill="#c5dde7" stroke="currentColor" stroke-width="1.05" stroke-linejoin="round"/></svg>';
+      }
+      function typeIcon(item) {
+        var url = iconUrl(item);
+        var type = fieldValue(item, 'type') || 'Oggetto 3DEXPERIENCE';
+        if (url) {
+          return '<img class="dsbom-type-icon dsbom-api-type-icon" src="' + escapeHtml(url) + '" alt="" title="' + escapeHtml(type) + '">';
+        }
+        return '<span class="dsbom-fallback-type-icon" title="' + escapeHtml(type) + '">' + fallbackTypeIcon(type) + '</span>';
+      }
+      function itemIdentity(item, title) {
+        return '<span class="dsbom-item-identity">' + typeIcon(item) + '<span class="dsbom-item-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span></span>';
+      }
       function stateClass(state) { return String(state || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
       function stateBadge(state) {
         var text = String(state || 'N/A');
@@ -323,7 +353,7 @@
         var i, item;
         for (i = 0; i < objects.length; i += 1) {
           item = objects[i];
-          html += '<tr class="dsbom-object' + (selectedObject && objectId(selectedObject) === objectId(item) ? ' ds-selected' : '') + '" data-index="' + i + '"><td>' + escapeHtml(fieldValue(item, 'title')) + '</td><td>' + escapeHtml(fieldValue(item, 'name')) + '</td><td>' + escapeHtml(fieldValue(item, 'id')) + '</td><td>' + escapeHtml(fieldValue(item, 'type')) + '</td><td>' + stateBadge(fieldValue(item, 'state')) + '</td></tr>';
+          html += '<tr class="dsbom-object' + (selectedObject && objectId(selectedObject) === objectId(item) ? ' ds-selected' : '') + '" data-index="' + i + '"><td>' + itemIdentity(item, fieldValue(item, 'title')) + '</td><td>' + escapeHtml(fieldValue(item, 'name')) + '</td><td>' + escapeHtml(fieldValue(item, 'id')) + '</td><td>' + escapeHtml(fieldValue(item, 'type')) + '</td><td>' + stateBadge(fieldValue(item, 'state')) + '</td></tr>';
         }
         html += '<tr class="dsbom-empty dsbom-empty-results" hidden="hidden"><td colspan="5">Nessun risultato corrisponde ai filtri.</td></tr>';
         el('.dsbom-results').innerHTML = html + '</tbody>';
@@ -443,7 +473,7 @@
         var hasChildren = children.length > 0;
         var expanded = expandedNodes[node.id] !== false;
         var i;
-        rows.push('<tr class="dsbom-tree-row" data-node-id="' + escapeHtml(node.id) + '"><td class="dsbom-tree-title" style="padding-left:' + (8 + depth * 18) + 'px">' + (hasChildren ? '<button class="dsbom-toggle" type="button" data-node-id="' + escapeHtml(node.id) + '" aria-label="Espandi o comprimi">' + (expanded ? '-' : '+') + '</button>' : '<span class="dsbom-leaf"></span>') + escapeHtml(fieldValue(node.item, 'title') || fieldValue(node.item, 'name')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'name')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'id')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'type')) + '</td><td>' + stateBadge(fieldValue(node.item, 'state')) + '</td></tr>');
+        rows.push('<tr class="dsbom-tree-row" data-node-id="' + escapeHtml(node.id) + '"><td class="dsbom-tree-title" style="padding-left:' + (8 + depth * 18) + 'px">' + (hasChildren ? '<button class="dsbom-toggle" type="button" data-node-id="' + escapeHtml(node.id) + '" aria-label="Espandi o comprimi">' + (expanded ? '-' : '+') + '</button>' : '<span class="dsbom-leaf"></span>') + itemIdentity(node.item, fieldValue(node.item, 'title') || fieldValue(node.item, 'name')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'name')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'id')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'type')) + '</td><td>' + stateBadge(fieldValue(node.item, 'state')) + '</td></tr>');
         if (hasChildren && expanded) {
           for (i = 0; i < children.length; i += 1) { appendBomNode(children[i], depth + 1, rows); }
         }
