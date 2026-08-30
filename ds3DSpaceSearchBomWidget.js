@@ -23,6 +23,7 @@
       var expandedNodes = {};
       var resultFilters = {};
       var bomFilters = {};
+      var availableContexts = [];
       var tagProxy = null;
       var tagFilterActive = false;
       var visibleTagSubjects = {};
@@ -115,10 +116,12 @@
       }
       function bindColumnFilters() {
         widget.body.querySelectorAll('.dsbom-column-filter').forEach(function (input) {
+          if (input.getAttribute('data-filter-bound') === 'true') { return; }
+          input.setAttribute('data-filter-bound', 'true');
           input.addEventListener('input', function () {
             var target = input.getAttribute('data-kind') === 'results' ? resultFilters : bomFilters;
             target[input.getAttribute('data-field')] = input.value;
-            if (input.getAttribute('data-kind') === 'results') { renderResults(); } else { renderBom(); }
+            if (input.getAttribute('data-kind') === 'results') { applyResultFilters(); } else { applyBomFilters(); }
           });
         });
       }
@@ -127,40 +130,52 @@
         var current = securityContext();
         var options = [];
         var i;
-        if (contexts.indexOf(current) < 0) { contexts.unshift(current); }
-        contexts.sort(function (a, b) { return a.localeCompare(b); });
-        for (i = 0; i < contexts.length; i += 1) { options.push({ label: contexts[i], value: contexts[i] }); }
+        availableContexts = contexts.filter(function (context, index, list) { return context && list.indexOf(context) === index; });
+        if (availableContexts.indexOf(current) < 0) { availableContexts.unshift(current); }
+        availableContexts.sort(function (a, b) { return a.localeCompare(b); });
+        for (i = 0; i < availableContexts.length; i += 1) { options.push({ label: availableContexts[i], value: availableContexts[i] }); }
         widget.addPreference({ name: 'SecurityContext', type: 'list', label: 'Security context', defaultValue: current, options: options });
         widget.setValue('SecurityContext', current);
+        updateContextSelector();
       }
-      function collectContexts(object, role, organization, space, component, result) {
-        var i, name, nextRole = role, nextOrganization = organization, nextSpace = space;
+      function namedValue(value) {
+        if (typeof value === 'string') { return value; }
+        if (!value || typeof value !== 'object' || Array.isArray(value)) { return ''; }
+        return valueOf(value, ['name', 'title', 'label', 'value', 'id']);
+      }
+      function collectContexts(object, result) {
+        var i, key, lower, role, organization, space, text;
         if (typeof object === 'string') {
-          if (component === 'role') { nextRole = object; }
-          if (component === 'organization') { nextOrganization = object; }
-          if (component === 'space') { nextSpace = object; }
-          if (object.replace(/^ctx::/i, '').split('.').length >= 3) { result.push(object.replace(/^ctx::/i, '').trim()); }
-          if (component === 'space' && nextRole && nextOrganization) { result.push(nextRole + '.' + nextOrganization + '.' + object); }
+          text = object.replace(/^ctx::/i, '').trim();
+          if (!/[:/@]/.test(text) && text.split('.').length >= 3) { result.push(text); }
           return;
         }
         if (Array.isArray(object)) {
-          for (i = 0; i < object.length; i += 1) { collectContexts(object[i], nextRole, nextOrganization, nextSpace, component, result); }
+          for (i = 0; i < object.length; i += 1) { collectContexts(object[i], result); }
           return;
         }
         if (!object || typeof object !== 'object') { return; }
-        name = object.name || object.title || object.id || '';
-        if (component === 'role') { nextRole = name || nextRole; }
-        if (component === 'organization') { nextOrganization = name || nextOrganization; }
-        if (component === 'space') { nextSpace = name || nextSpace; }
-        if (nextRole && nextOrganization && nextSpace) { result.push(nextRole + '.' + nextOrganization + '.' + nextSpace); }
-        Object.keys(object).forEach(function (key) {
-          var lower = key.toLowerCase();
-          var nextComponent = component;
-          if (lower === 'role' || lower === 'roles' || lower === 'responsibility' || lower === 'responsibilities' || lower === 'credentials') { nextComponent = 'role'; }
-          if (lower === 'organization' || lower === 'organizations' || lower === 'company' || lower === 'companies') { nextComponent = 'organization'; }
-          if (lower === 'collabspace' || lower === 'collabspaces' || lower === 'collaborativespace' || lower === 'collaborativespaces') { nextComponent = 'space'; }
-          collectContexts(object[key], nextRole, nextOrganization, nextSpace, nextComponent, result);
+        ['securityContext', 'securitycontext', 'context', 'credential'].forEach(function (name) { if (object[name]) { collectContexts(object[name], result); } });
+        role = namedValue(object.role || object.responsibility || object.securityRole);
+        organization = namedValue(object.organization || object.company || object.enterprise);
+        space = namedValue(object.collabspace || object.collabSpace || object.collaborativeSpace || object.space);
+        if (role && organization && space) { result.push(role + '.' + organization + '.' + space); }
+        Object.keys(object).forEach(function (name) {
+          lower = name.toLowerCase();
+          if (lower !== 'securitycontext' && lower !== 'context' && lower !== 'credential') { collectContexts(object[name], result); }
         });
+      }
+      function updateContextSelector() {
+        var selector = el('.dsbom-context');
+        var html = [];
+        var current = securityContext();
+        var i;
+        if (!selector) { return; }
+        for (i = 0; i < availableContexts.length; i += 1) {
+          html.push('<option value="' + escapeHtml(availableContexts[i]) + '"' + (availableContexts[i] === current ? ' selected="selected"' : '') + '>' + escapeHtml(availableContexts[i]) + '</option>');
+        }
+        selector.innerHTML = html.join('');
+        selector.disabled = !availableContexts.length;
       }
       function ensureServiceUrl(done, failure) {
         var platformId = widget.getValue('x3dPlatformId');
@@ -174,11 +189,11 @@
       }
       function loadContexts() {
         ensureServiceUrl(function () {
-          WAFData.authenticatedRequest(serviceUrl + '/resources/modeler/pno/person?current=true&select=collabspaces', {
+          WAFData.authenticatedRequest(serviceUrl + '/resources/modeler/pno/person?current=true&select=collabspaces&select=credentials&select=roles&select=organizations&select=securitycontexts', {
             method: 'GET', type: 'json', timeout: 30000,
             onComplete: function (response) {
               var result = [];
-              collectContexts(response, null, null, null, null, result);
+              collectContexts(response, result);
               result = result.filter(function (item, index, list) { return list.indexOf(item) === index; });
               configureContexts(result.length ? result : [DEFAULT_CONTEXT]);
             },
@@ -305,15 +320,12 @@
           { label: 'Id', field: 'id', filter: true }, { label: 'Type', field: 'type', filter: true }, { label: 'State', field: 'state', filter: true }
         ];
         var html = columnHeaders('results', columns) + '<tbody>';
-        var shown = 0;
         var i, item;
         for (i = 0; i < objects.length; i += 1) {
           item = objects[i];
-          if (!matchesFilters(item, resultFilters) || !tagVisible(item)) { continue; }
-          shown += 1;
           html += '<tr class="dsbom-object' + (selectedObject && objectId(selectedObject) === objectId(item) ? ' ds-selected' : '') + '" data-index="' + i + '"><td>' + escapeHtml(fieldValue(item, 'title')) + '</td><td>' + escapeHtml(fieldValue(item, 'name')) + '</td><td>' + escapeHtml(fieldValue(item, 'id')) + '</td><td>' + escapeHtml(fieldValue(item, 'type')) + '</td><td>' + stateBadge(fieldValue(item, 'state')) + '</td></tr>';
         }
-        if (!shown) { html += '<tr><td class="dsbom-empty" colspan="5">Nessun risultato corrisponde ai filtri.</td></tr>'; }
+        html += '<tr class="dsbom-empty dsbom-empty-results" hidden="hidden"><td colspan="5">Nessun risultato corrisponde ai filtri.</td></tr>';
         el('.dsbom-results').innerHTML = html + '</tbody>';
         el('.dsbom-results').querySelectorAll('tr.dsbom-object').forEach(function (row) {
           row.addEventListener('click', function () {
@@ -322,6 +334,21 @@
           });
         });
         bindColumnFilters();
+        applyResultFilters();
+      }
+      function applyResultFilters() {
+        var table = el('.dsbom-results');
+        var rows, empty, shown = 0;
+        if (!table) { return; }
+        rows = table.querySelectorAll('tr.dsbom-object');
+        rows.forEach(function (row) {
+          var item = objects[Number(row.getAttribute('data-index'))];
+          var visible = matchesFilters(item, resultFilters) && tagVisible(item);
+          row.hidden = !visible;
+          if (visible) { shown += 1; }
+        });
+        empty = table.querySelector('.dsbom-empty-results');
+        if (empty) { empty.hidden = shown > 0; }
       }
       function csrf(done, failure) {
         WAFData.authenticatedRequest(serviceUrl + '/resources/v1/application/CSRF', {
@@ -416,7 +443,6 @@
         var hasChildren = children.length > 0;
         var expanded = expandedNodes[node.id] !== false;
         var i;
-        if (!nodeMatchesOrHasMatchingChild(node)) { return; }
         rows.push('<tr class="dsbom-tree-row" data-node-id="' + escapeHtml(node.id) + '"><td class="dsbom-tree-title" style="padding-left:' + (8 + depth * 18) + 'px">' + (hasChildren ? '<button class="dsbom-toggle" type="button" data-node-id="' + escapeHtml(node.id) + '" aria-label="Espandi o comprimi">' + (expanded ? '-' : '+') + '</button>' : '<span class="dsbom-leaf"></span>') + escapeHtml(fieldValue(node.item, 'title') || fieldValue(node.item, 'name')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'name')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'id')) + '</td><td>' + escapeHtml(fieldValue(node.item, 'type')) + '</td><td>' + stateBadge(fieldValue(node.item, 'state')) + '</td></tr>');
         if (hasChildren && expanded) {
           for (i = 0; i < children.length; i += 1) { appendBomNode(children[i], depth + 1, rows); }
@@ -435,7 +461,7 @@
           return;
         }
         appendBomNode(bomNodes[objectId(bomRoot)], 0, rows);
-        if (!rows.length) { rows.push('<tr><td class="dsbom-empty" colspan="5">Nessun nodo corrisponde ai filtri.</td></tr>'); }
+        rows.push('<tr class="dsbom-empty dsbom-empty-bom" hidden="hidden"><td colspan="5">Nessun nodo corrisponde ai filtri.</td></tr>');
         el('.dsbom-bom').innerHTML = html + rows.join('') + '</tbody>';
         el('.dsbom-bom').querySelectorAll('.dsbom-toggle').forEach(function (button) {
           button.addEventListener('click', function (event) {
@@ -446,12 +472,39 @@
           });
         });
         bindColumnFilters();
+        applyBomFilters();
+      }
+      function applyBomFilters() {
+        var table = el('.dsbom-bom');
+        var visibility = {};
+        var shown = 0;
+        function resolve(node, parentVisible) {
+          var own = matchesFilters(node.item, bomFilters) && tagVisible(node.item);
+          var childMatches = false;
+          var expanded = expandedNodes[node.id] !== false;
+          var i;
+          for (i = 0; i < node.children.length; i += 1) { if (resolve(node.children[i], parentVisible && expanded)) { childMatches = true; } }
+          visibility[node.id] = { matches: own || childMatches, visible: parentVisible && (own || childMatches) };
+          return own || childMatches;
+        }
+        if (!table || !bomRoot || !bomNodes[objectId(bomRoot)]) { return; }
+        resolve(bomNodes[objectId(bomRoot)], true);
+        table.querySelectorAll('tr.dsbom-tree-row').forEach(function (row) {
+          var state = visibility[row.getAttribute('data-node-id')];
+          row.hidden = !state || !state.visible;
+          if (state && state.visible) { shown += 1; }
+        });
+        table.querySelector('.dsbom-empty-bom').hidden = shown > 0;
       }
       function setup() {
-        widget.body.innerHTML = '<main class="dsbom-root"><div class="dsbom-toolbar"><div class="dsbom-field"><label>Modeler</label><input class="dsbom-modeler" value="dseng" /></div><div class="dsbom-field"><label>Tipo tecnico</label><input class="dsbom-type" value="dseng:EngItem" /></div><div class="dsbom-field"><label>Mask (opzionale)</label><input class="dsbom-mask" value="dsmveng:EngItemMask.Common" /></div><div class="dsbom-field"><label>Prefisso / ricerca</label><input class="dsbom-search" placeholder="es. DO- o SP-" /></div><button class="dsbom-button dsbom-search-button" type="button">Cerca</button></div><div class="dsbom-status">Pronto.</div><div class="dsbom-6w-status">6WTag in inizializzazione...</div><section class="dsbom-section"><h2 class="dsbom-section-title">Risultati</h2><div class="dsbom-table-wrap"><table class="dsbom-table dsbom-results"><tbody><tr><td class="dsbom-empty" colspan="5">Esegui una ricerca.</td></tr></tbody></table></div></section><section class="dsbom-section"><h2 class="dsbom-section-title">Distinta <select class="dsbom-depth" title="Profondita della distinta"><option value="1">Livello 1</option><option value="2">Livello 2</option><option value="-1">Tutti i livelli</option></select></h2><div class="dsbom-table-wrap dsbom-tree-wrap"><table class="dsbom-table dsbom-bom-table dsbom-bom"><tbody><tr><td class="dsbom-empty" colspan="5">Seleziona un risultato per caricare la distinta.</td></tr></tbody></table></div></section></main>';
+        widget.body.innerHTML = '<main class="dsbom-root"><div class="dsbom-toolbar"><div class="dsbom-field"><label>Modeler</label><input class="dsbom-modeler" value="dseng" /></div><div class="dsbom-field"><label>Tipo tecnico</label><input class="dsbom-type" value="dseng:EngItem" /></div><div class="dsbom-field"><label>Mask (opzionale)</label><input class="dsbom-mask" value="dsmveng:EngItemMask.Common" /></div><div class="dsbom-field dsbom-context-field"><label>Security context</label><select class="dsbom-context" disabled="disabled"><option>Caricamento...</option></select></div><div class="dsbom-field"><label>Prefisso / ricerca</label><input class="dsbom-search" placeholder="es. DO- o SP-" /></div><button class="dsbom-button dsbom-search-button" type="button">Cerca</button></div><div class="dsbom-status">Pronto.</div><div class="dsbom-6w-status">6WTag in inizializzazione...</div><section class="dsbom-section"><h2 class="dsbom-section-title">Risultati</h2><div class="dsbom-table-wrap"><table class="dsbom-table dsbom-results"><tbody><tr><td class="dsbom-empty" colspan="5">Esegui una ricerca.</td></tr></tbody></table></div></section><section class="dsbom-section"><h2 class="dsbom-section-title">Distinta <select class="dsbom-depth" title="Profondita della distinta"><option value="1">Livello 1</option><option value="2">Livello 2</option><option value="-1">Tutti i livelli</option></select></h2><div class="dsbom-table-wrap dsbom-tree-wrap"><table class="dsbom-table dsbom-bom-table dsbom-bom"><tbody><tr><td class="dsbom-empty" colspan="5">Seleziona un risultato per caricare la distinta.</td></tr></tbody></table></div></section></main>';
         el('.dsbom-search-button').addEventListener('click', search);
         el('.dsbom-search').addEventListener('keydown', function (event) { if (event.key === 'Enter') { search(); } });
         el('.dsbom-depth').addEventListener('change', function () { if (selectedObject) { loadBom(selectedObject); } });
+        el('.dsbom-context').addEventListener('change', function () {
+          widget.setValue('SecurityContext', this.value);
+          setStatus('Security context impostato: ' + this.value + '.', false);
+        });
         initialize6WTagger();
         loadContexts();
       }
