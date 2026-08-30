@@ -169,7 +169,12 @@
       if (!id) { setStatus('L\'oggetto selezionato non contiene un ID.', true); return; }
       setStatus('Caricamento distinta...', false);
       csrf(function (token) {
-        var body = { expandDepth: Number(el('.dsbom-depth').value), withPath: true, type_filter_bo: ['VPMReference', 'VPMRepReference'], type_filter_rel: ['VPMInstance', 'VPMRepInstance'], filter: '' };
+        var body = {
+          expandDepth: Number(el('.dsbom-depth').value),
+          withPath: true,
+          type_filter_bo: ['VPMReference', 'VPMRepReference'],
+          type_filter_rel: ['VPMInstance', 'VPMRepInstance']
+        };
         WAFData.authenticatedRequest(serviceUrl + '/resources/v1/modeler/dseng/dseng:EngItem/' + encodeURIComponent(id) + '/expand', { method: 'POST', type: 'json', timeout: 120000, data: JSON.stringify(body), headers: { 'Content-Type': 'application/json;charset=UTF-8', SecurityContext: securityContext(), ENO_CSRF_TOKEN: token }, onComplete: function (response) { renderBom(response, item); setStatus('Distinta caricata.', false); }, onFailure: function (error, response) { setStatus('Impossibile caricare la distinta: ' + errorMessage(error, response), true); } });
       }, function (message) { setStatus('Impossibile caricare la distinta: ' + message, true); });
     }
