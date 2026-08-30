@@ -2,7 +2,13 @@
 (function () {
   'use strict';
 
-  require(['DS/WAFData/WAFData', 'DS/i3DXCompassServices/i3DXCompassServices'], function (WAFData, i3DXCompassServices) {
+  /* Le risorse esterne possono essere valutate prima che UWA esponga widget/require. */
+  function start() {
+    if (typeof widget === 'undefined' || typeof require !== 'function') {
+      window.setTimeout(start, 50);
+      return;
+    }
+    require(['DS/WAFData/WAFData', 'DS/i3DXCompassServices/i3DXCompassServices'], function (WAFData, i3DXCompassServices) {
     var PAGE_SIZE = 1000;
     var DEFAULT_CONTEXT = 'VPLMProjectLeader.Company Name.3DXPowerShell';
     var serviceUrl = null;
@@ -180,6 +186,8 @@
       widget.body.innerHTML = '<main class="dsbom-root"><div class="dsbom-toolbar"><div class="dsbom-field"><label>Modeler</label><input class="dsbom-modeler" value="dseng" /></div><div class="dsbom-field"><label>Tipo tecnico</label><input class="dsbom-type" value="dseng:EngItem" /></div><div class="dsbom-field"><label>Mask (opzionale)</label><input class="dsbom-mask" value="dsmveng:EngItemMask.Common" /></div><div class="dsbom-field"><label>Prefisso / ricerca</label><input class="dsbom-search" placeholder="es. DO- o SP-" /></div><button class="dsbom-button dsbom-search-button" type="button">Cerca</button></div><div class="dsbom-status">Pronto.</div><section class="dsbom-section"><h2 class="dsbom-section-title">Risultati</h2><div class="dsbom-table-wrap"><table class="dsbom-table dsbom-results"><tbody><tr><td class="dsbom-empty" colspan="5">Esegui una ricerca.</td></tr></tbody></table></div></section><section class="dsbom-section"><h2 class="dsbom-section-title">Distinta <select class="dsbom-depth" title="Profondita della distinta"><option value="1">Livello 1</option><option value="2">Livello 2</option><option value="-1">Tutti i livelli</option></select></h2><div class="dsbom-table-wrap"><table class="dsbom-table dsbom-bom-table dsbom-bom"><tbody><tr><td class="dsbom-empty" colspan="5">Seleziona un risultato per caricare la distinta.</td></tr></tbody></table></div></section></main>';
       el('.dsbom-search-button').addEventListener('click', search); el('.dsbom-search').addEventListener('keydown', function (event) { if (event.key === 'Enter') { search(); } }); loadContexts();
     }
-    widget.addEvent('onLoad', setup);
-  });
+      widget.addEvent('onLoad', setup);
+    });
+  }
+  start();
 }());
