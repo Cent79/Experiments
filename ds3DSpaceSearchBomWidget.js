@@ -29,6 +29,19 @@
     function errorMessage(error, response) {
       return valueOf(response, ['message', 'errorMessage', 'detail']) || (error && (error.message || String(error))) || 'Errore durante la richiesta.';
     }
+    function findNestedValue(object, name) {
+      var keys;
+      var i;
+      var found;
+      if (!object || typeof object !== 'object') { return ''; }
+      if (object[name] !== undefined && object[name] !== null) { return String(object[name]); }
+      keys = Object.keys(object);
+      for (i = 0; i < keys.length; i += 1) {
+        found = findNestedValue(object[keys[i]], name);
+        if (found) { return found; }
+      }
+      return '';
+    }
     function members(response) {
       var candidates = [response && response.member, response && response.items, response && response.results, response && response.objects, response && response.data && response.data.member];
       var i;
@@ -143,7 +156,7 @@
       el('.dsbom-results').querySelectorAll('tr.ds-object').forEach(function (row) { row.addEventListener('click', function () { el('.dsbom-results').querySelectorAll('tr.ds-selected').forEach(function (old) { old.classList.remove('ds-selected'); }); row.classList.add('ds-selected'); loadBom(objects[Number(row.getAttribute('data-index'))]); }); });
     }
     function csrf(done, failure) {
-      WAFData.authenticatedRequest(serviceUrl + '/resources/v1/application/CSRF', { method: 'GET', type: 'json', timeout: 30000, headers: { SecurityContext: securityContext() }, onComplete: function (response) { var token = response && response.value; if (!token && response && response.data) { token = response.data.value; } if (token) { done(token); } else { failure('Token CSRF non restituito.'); } }, onFailure: function (error, response) { failure(errorMessage(error, response)); } });
+      WAFData.authenticatedRequest(serviceUrl + '/resources/v1/application/CSRF', { method: 'GET', type: 'json', timeout: 30000, headers: { SecurityContext: securityContext() }, onComplete: function (response) { var token = findNestedValue(response, 'value') || findNestedValue(response, 'Value') || findNestedValue(response, 'csrfToken'); if (token) { done(token); } else { failure('Token CSRF non restituito.'); } }, onFailure: function (error, response) { failure(errorMessage(error, response)); } });
     }
     function loadBom(item) {
       var id = valueOf(item, ['id', 'Id']);

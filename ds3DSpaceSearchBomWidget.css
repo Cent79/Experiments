@@ -1,11 +1,12 @@
 :root {
   color-scheme: light;
-  --ink: #243447;
-  --muted: #607286;
-  --line: #d7dee7;
-  --panel: #f7f9fb;
+  --ink: #1f3647;
+  --muted: #62798a;
+  --line: #cbd8e1;
+  --panel: #f3f7f9;
   --accent: #087f8c;
-  --accent-dark: #05616b;
+  --accent-dark: #005b70;
+  --ds-blue: #005686;
   --danger: #a33a3a;
 }
 
@@ -17,26 +18,31 @@ body {
   font-family: "Segoe UI", Arial, sans-serif;
   font-size: 13px;
 }
-.dsbom-root { padding: 12px; }
+.dsbom-root { background: #ffffff; padding: 10px 12px 14px; }
 .dsbom-toolbar {
   display: grid;
   grid-template-columns: minmax(100px, .7fr) minmax(150px, 1.1fr) minmax(130px, 1fr) minmax(150px, 1.2fr) auto;
   gap: 8px;
   align-items: end;
+  background: var(--panel);
   border-bottom: 1px solid var(--line);
+  border-top: 3px solid var(--ds-blue);
   padding-bottom: 10px;
+  padding: 9px;
 }
 .dsbom-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .dsbom-field label {
-  color: var(--muted);
+  color: var(--ds-blue);
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: .03em;
   text-transform: uppercase;
 }
 .dsbom-field input, .dsbom-field select {
   min-height: 32px;
   border: 1px solid #aebdcb;
-  border-radius: 3px;
+  border-radius: 2px;
+  background: #ffffff;
   color: var(--ink);
   font: inherit;
   min-width: 0;
@@ -45,7 +51,7 @@ body {
 .dsbom-button {
   min-height: 32px;
   border: 1px solid var(--accent-dark);
-  border-radius: 3px;
+  border-radius: 2px;
   background: var(--accent);
   color: #ffffff;
   cursor: pointer;
@@ -58,7 +64,7 @@ body {
 .dsbom-status { min-height: 28px; color: var(--muted); padding: 8px 0; }
 .dsbom-status.error { color: var(--danger); }
 .dsbom-section { margin-top: 12px; }
-.dsbom-section-title { font-size: 13px; font-weight: 700; margin: 0 0 6px; }
+.dsbom-section-title { border-bottom: 2px solid #d8e5eb; color: var(--ds-blue); font-size: 13px; font-weight: 700; margin: 0 0 6px; padding-bottom: 5px; }
 .dsbom-table-wrap { max-height: 280px; overflow: auto; border: 1px solid var(--line); }
 .dsbom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .dsbom-table th, .dsbom-table td {
@@ -71,8 +77,10 @@ body {
 .dsbom-table th {
   position: sticky;
   top: 0;
-  background: #eef2f5;
-  font-size: 11px;
+  background: #e7f0f4;
+  color: #2b5369;
+  font-size: 10px;
+  letter-spacing: .03em;
   text-transform: uppercase;
   z-index: 1;
 }
@@ -91,6 +99,7 @@ body {
 .dsbom-bom-table th:nth-child(5) { width: 18%; }
 .dsbom-empty { color: var(--muted); padding: 12px 8px !important; }
 .dsbom-level { color: var(--muted); font-weight: 600; }
+.dsbom-depth { border: 1px solid #aebdcb; border-radius: 2px; color: var(--ink); font: inherit; margin-left: 5px; padding: 2px 5px; }
 @media (max-width: 760px) {
   .dsbom-toolbar { grid-template-columns: 1fr 1fr; }
   .dsbom-toolbar .dsbom-field:nth-child(4), .dsbom-toolbar .dsbom-button { grid-column: span 2; }
