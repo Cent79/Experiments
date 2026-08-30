@@ -45,6 +45,12 @@
         node.className = error ? 'dsbom-status error' : 'dsbom-status';
         node.textContent = message || '';
       }
+      function set6WStatus(message, error) {
+        var node = el('.dsbom-6w-status');
+        if (!node) { return; }
+        node.className = error ? 'dsbom-6w-status error' : 'dsbom-6w-status';
+        node.textContent = message || '';
+      }
       function findNestedValue(object, name) {
         var keys, i, found;
         if (!object || typeof object !== 'object') { return ''; }
@@ -71,7 +77,8 @@
       }
       function securityContext() { return widget.getValue('SecurityContext') || DEFAULT_CONTEXT; }
       function objectId(item) { return valueOf(item, ['id', 'Id', 'identifier', 'Identifier']); }
-      function subjectOf(item) { return 'urn:3dx:' + (widget.getValue('x3dPlatformId') || 'platform') + ':' + objectId(item); }
+      // Client-side 6W subjects: stable within the widget and independent from a DS internal URI format.
+      function subjectOf(item) { return 'dsbom://' + widget.id + '/' + objectId(item); }
       function fieldValue(item, field) {
         if (field === 'title') { return valueOf(item, ['title', 'Title']); }
         if (field === 'name') { return valueOf(item, ['name', 'Name']); }
@@ -207,17 +214,22 @@
         if (bomRoot) { add(bomRoot); }
         ids = Object.keys(bomNodes);
         for (i = 0; i < ids.length; i += 1) { add(bomNodes[ids[i]].item); }
-        try { tagProxy.setSubjectsTags(subjectTags); tagProxy.activate(); } catch (ignore) { }
+        try {
+          tagProxy.setSubjectsTags(subjectTags);
+          tagProxy.activate();
+          set6WStatus('6WTag attivo: ' + Object.keys(subjectTags).length + ' oggetti indicizzati.', false);
+        } catch (error) {
+          set6WStatus('6WTag non disponibile: ' + (error.message || String(error)), true);
+        }
       }
       function initialize6WTagger() {
         try {
           tagProxy = TagNavigatorProxy.createProxy({
             widgetId: widget.id,
-            filteringMode: 'WithFilteringServices',
-            tenant: widget.getValue('x3dPlatformId')
+            filteringMode: TagNavigatorProxy.filteringMode && TagNavigatorProxy.filteringMode.WithFilteringServices ? TagNavigatorProxy.filteringMode.WithFilteringServices : 'WithFilteringServices'
           });
           tagProxy.addEvent('onFilterSubjectsChange', function (filter) {
-            var subjects = filter && filter.filteredSubjectList;
+            var subjects = Array.isArray(filter) ? filter : filter && filter.filteredSubjectList;
             var i;
             visibleTagSubjects = {};
             tagFilterActive = Array.isArray(subjects) && subjects.length > 0;
@@ -227,7 +239,11 @@
             renderResults();
             renderBom();
           });
-        } catch (ignore) { tagProxy = null; }
+          set6WStatus('6WTag pronto: esegui una ricerca per pubblicare i tag.', false);
+        } catch (error) {
+          tagProxy = null;
+          set6WStatus('6WTag non inizializzato: ' + (error.message || String(error)), true);
+        }
       }
 
       function requestPage(modeler, type, mask, searchText, skip, done, failure) {
@@ -316,32 +332,52 @@
           onFailure: function (error, response) { failure(errorMessage(error, response)); }
         });
       }
+      function pathOf(entry) {
+        var path = entry && (entry.Path || entry.path || entry.objectPath);
+        if (!Array.isArray(path)) { return []; }
+        return path.map(function (part) { return typeof part === 'object' ? objectId(part) : String(part); }).filter(Boolean);
+      }
       function createBomTree(response, root) {
         var entries = members(response);
-        var paths = {};
-        var i, item, id, node, parentId;
+        var paths = [];
+        var linked = {};
+        var i, item, id, path, j;
+        function ensureNode(nodeId, nodeItem) {
+          if (!nodeId) { return null; }
+          if (!bomNodes[nodeId]) { bomNodes[nodeId] = { item: nodeItem || { id: nodeId, title: nodeId, type: 'Object' }, id: nodeId, children: [] }; }
+          if (nodeItem) { bomNodes[nodeId].item = nodeItem; }
+          return bomNodes[nodeId];
+        }
+        function link(parentId, childId) {
+          var key;
+          if (!parentId || !childId || parentId === childId) { return; }
+          key = parentId + '>' + childId;
+          if (linked[key]) { return; }
+          linked[key] = true;
+          ensureNode(parentId).children.push(ensureNode(childId));
+        }
         bomRoot = root;
         bomNodes = {};
         expandedNodes = {};
-        bomNodes[objectId(root)] = { item: root, id: objectId(root), children: [] };
+        ensureNode(objectId(root), root);
         for (i = 0; i < entries.length; i += 1) {
-          if (Array.isArray(entries[i].Path) && entries[i].Path.length) { paths[entries[i].Path[entries[i].Path.length - 1]] = entries[i].Path; }
-        }
-        for (i = 0; i < entries.length; i += 1) {
+          path = pathOf(entries[i]);
+          if (path.length) { paths.push(path); }
           item = entries[i];
-          if (item.Path) { continue; }
           id = objectId(item);
-          if (id && !bomNodes[id]) { bomNodes[id] = { item: item, id: id, children: [] }; }
+          if (id) { ensureNode(id, item); }
         }
-        Object.keys(bomNodes).forEach(function (childId) {
-          if (childId === objectId(root)) { return; }
-          node = bomNodes[childId];
-          parentId = paths[childId] && paths[childId].length > 1 ? paths[childId][paths[childId].length - 2] : objectId(root);
-          if (!bomNodes[parentId] || parentId === childId) { parentId = objectId(root); }
-          bomNodes[parentId].children.push(node);
-          expandedNodes[childId] = true;
+        for (i = 0; i < paths.length; i += 1) {
+          path = paths[i];
+          for (j = 0; j < path.length; j += 1) { ensureNode(path[j]); }
+          for (j = 1; j < path.length; j += 1) { link(path[j - 1], path[j]); }
+          if (path[0] !== objectId(root)) { link(objectId(root), path[0]); }
+        }
+        Object.keys(bomNodes).forEach(function (nodeId) {
+          var hasParent = Object.keys(linked).some(function (key) { return key.slice(key.indexOf('>') + 1) === nodeId; });
+          if (nodeId !== objectId(root) && !hasParent) { link(objectId(root), nodeId); }
+          expandedNodes[nodeId] = true;
         });
-        expandedNodes[objectId(root)] = true;
       }
       function loadBom(item) {
         var id = objectId(item);
@@ -411,7 +447,7 @@
         bindColumnFilters();
       }
       function setup() {
-        widget.body.innerHTML = '<main class="dsbom-root"><div class="dsbom-toolbar"><div class="dsbom-field"><label>Modeler</label><input class="dsbom-modeler" value="dseng" /></div><div class="dsbom-field"><label>Tipo tecnico</label><input class="dsbom-type" value="dseng:EngItem" /></div><div class="dsbom-field"><label>Mask (opzionale)</label><input class="dsbom-mask" value="dsmveng:EngItemMask.Common" /></div><div class="dsbom-field"><label>Prefisso / ricerca</label><input class="dsbom-search" placeholder="es. DO- o SP-" /></div><button class="dsbom-button dsbom-search-button" type="button">Cerca</button></div><div class="dsbom-status">Pronto.</div><section class="dsbom-section"><h2 class="dsbom-section-title">Risultati</h2><div class="dsbom-table-wrap"><table class="dsbom-table dsbom-results"><tbody><tr><td class="dsbom-empty" colspan="5">Esegui una ricerca.</td></tr></tbody></table></div></section><section class="dsbom-section"><h2 class="dsbom-section-title">Distinta <select class="dsbom-depth" title="Profondita della distinta"><option value="1">Livello 1</option><option value="2">Livello 2</option><option value="-1">Tutti i livelli</option></select></h2><div class="dsbom-table-wrap dsbom-tree-wrap"><table class="dsbom-table dsbom-bom-table dsbom-bom"><tbody><tr><td class="dsbom-empty" colspan="5">Seleziona un risultato per caricare la distinta.</td></tr></tbody></table></div></section></main>';
+        widget.body.innerHTML = '<main class="dsbom-root"><div class="dsbom-toolbar"><div class="dsbom-field"><label>Modeler</label><input class="dsbom-modeler" value="dseng" /></div><div class="dsbom-field"><label>Tipo tecnico</label><input class="dsbom-type" value="dseng:EngItem" /></div><div class="dsbom-field"><label>Mask (opzionale)</label><input class="dsbom-mask" value="dsmveng:EngItemMask.Common" /></div><div class="dsbom-field"><label>Prefisso / ricerca</label><input class="dsbom-search" placeholder="es. DO- o SP-" /></div><button class="dsbom-button dsbom-search-button" type="button">Cerca</button></div><div class="dsbom-status">Pronto.</div><div class="dsbom-6w-status">6WTag in inizializzazione...</div><section class="dsbom-section"><h2 class="dsbom-section-title">Risultati</h2><div class="dsbom-table-wrap"><table class="dsbom-table dsbom-results"><tbody><tr><td class="dsbom-empty" colspan="5">Esegui una ricerca.</td></tr></tbody></table></div></section><section class="dsbom-section"><h2 class="dsbom-section-title">Distinta <select class="dsbom-depth" title="Profondita della distinta"><option value="1">Livello 1</option><option value="2">Livello 2</option><option value="-1">Tutti i livelli</option></select></h2><div class="dsbom-table-wrap dsbom-tree-wrap"><table class="dsbom-table dsbom-bom-table dsbom-bom"><tbody><tr><td class="dsbom-empty" colspan="5">Seleziona un risultato per caricare la distinta.</td></tr></tbody></table></div></section></main>';
         el('.dsbom-search-button').addEventListener('click', search);
         el('.dsbom-search').addEventListener('keydown', function (event) { if (event.key === 'Enter') { search(); } });
         el('.dsbom-depth').addEventListener('change', function () { if (selectedObject) { loadBom(selectedObject); } });

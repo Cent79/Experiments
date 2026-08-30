@@ -71,6 +71,8 @@ body {
 .dsbom-button:disabled { cursor: wait; opacity: .6; }
 .dsbom-status { min-height: 28px; color: var(--muted); padding: 8px 0; }
 .dsbom-status.error { color: var(--danger); }
+.dsbom-6w-status { color: var(--muted); font-size: 11px; min-height: 18px; padding: 0 0 5px; }
+.dsbom-6w-status.error { color: var(--danger); }
 .dsbom-section { margin-top: 12px; }
 
 .dsbom-section-title {
